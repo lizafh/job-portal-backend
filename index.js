@@ -29,15 +29,18 @@ const client = new MongoClient(uri, {
   }
 });
 
-// Connect once at startup
-client.connect()
-.then(() => console.log('MongoDB connected!'))
-.catch(err => console.error('MongoDB connection error:', err));
+// Cached connection
+let isConnected = false;
 
-const jobsCollection = client.db('jobPortal').collection('jobs');
-const jobApplicationCollection = client.db('jobPortal').collection('job_applications');
+async function connectDB() {
+  if (!isConnected) {
+    await client.connect();
+    isConnected = true;
+    console.log('MongoDB connected!');
+  }
+  return client;
+}
 
-// Middleware
 const verifyToken = (req, res, next) => {
     const token = req?.cookies?.token;
     if(!token){
@@ -45,14 +48,13 @@ const verifyToken = (req, res, next) => {
     }
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
         if(err){
-            return res.status(401).send({message: 'Unauthorize Access'})
+            return res.status(401).send({message: 'Unauthorized Access'})
         }
         req.user = decoded;
         next(); 
     })
 }
 
-// Auth routes
 app.post('/jwt', async(req, res) => {
     const user = req.body;
     const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '5h'});
@@ -71,42 +73,41 @@ app.post('/logout', (req, res) => {
     }).send({success: true})
 })
 
-// Jobs routes
 app.get('/jobs', async(req, res) => {
+    await connectDB();
     const email = req.query.email;
     let query = {};
-    if(email){
-        query = {hr_email: email}
-    }
+    if(email) query = {hr_email: email};
+    const jobsCollection = client.db('jobPortal').collection('jobs');
     const result = await jobsCollection.find(query).toArray();
     res.send(result);
 })
 
 app.get('/jobs/:id', async(req, res) => {
-    const id = req.params.id;
-    const query = {_id: new ObjectId(id)}
-    const result = await jobsCollection.findOne(query);
+    await connectDB();
+    const jobsCollection = client.db('jobPortal').collection('jobs');
+    const result = await jobsCollection.findOne({_id: new ObjectId(req.params.id)});
     res.send(result);
 })
 
 app.post('/jobs', async(req, res) => {
-    const newJob = req.body;
-    const result = await jobsCollection.insertOne(newJob);
+    await connectDB();
+    const jobsCollection = client.db('jobPortal').collection('jobs');
+    const result = await jobsCollection.insertOne(req.body);
     res.send(result);
 })
 
-// Job application routes
 app.get('/job-application', verifyToken, async(req, res) => {
+    await connectDB();
+    const jobsCollection = client.db('jobPortal').collection('jobs');
+    const jobApplicationCollection = client.db('jobPortal').collection('job_applications');
     const email = req.query.email;
     if(req.user.email !== email){
         return res.status(403).send({message: 'forbidden access'})
     }
-    const query = { applicant_email: email }
-    const result = await jobApplicationCollection.find(query).toArray();
-
+    const result = await jobApplicationCollection.find({applicant_email: email}).toArray();
     for(const application of result){
-        const query1 = { _id: new ObjectId(application.job_id) }
-        const job = await jobsCollection.findOne(query1);
+        const job = await jobsCollection.findOne({_id: new ObjectId(application.job_id)});
         if(job){
             application.title = job.title;
             application.location = job.location;
@@ -118,35 +119,35 @@ app.get('/job-application', verifyToken, async(req, res) => {
 })
 
 app.get('/job-applications/jobs/:job_id', async(req, res) => {
-    const jobId = req.params.job_id;
-    const query = {job_id: jobId}
-    const result = await jobApplicationCollection.find(query).toArray();
+    await connectDB();
+    const jobApplicationCollection = client.db('jobPortal').collection('job_applications');
+    const result = await jobApplicationCollection.find({job_id: req.params.job_id}).toArray();
     res.send(result);   
 })
 
 app.post('/job-applications', async(req, res) => {
+    await connectDB();
+    const jobsCollection = client.db('jobPortal').collection('jobs');
+    const jobApplicationCollection = client.db('jobPortal').collection('job_applications');
     const application = req.body;
     const result = await jobApplicationCollection.insertOne(application);
-
-    const id = application.job_id;
-    const query = {_id: new ObjectId(id)}
-    const job = await jobsCollection.findOne(query);
-    let newCount = job.applicationCount ? job.applicationCount + 1 : 1;
-
+    const job = await jobsCollection.findOne({_id: new ObjectId(application.job_id)});
+    const newCount = job.applicationCount ? job.applicationCount + 1 : 1;
     await jobsCollection.updateOne(
-        {_id: new ObjectId(id)},
+        {_id: new ObjectId(application.job_id)},
         {$set: {applicationCount: newCount}}
     );
     res.send(result);
 });
 
 app.patch('/job-applications/:id', async(req, res) => {
-    const id = req.params.id;
-    const data = req.body;
-    const filter = {_id: new ObjectId(id)};
-    const updateDoc = { $set: { status: data.status } }
-    const result = await jobApplicationCollection.updateOne(filter, updateDoc);
-    res.send(result)
+    await connectDB();
+    const jobApplicationCollection = client.db('jobPortal').collection('job_applications');
+    const result = await jobApplicationCollection.updateOne(
+        {_id: new ObjectId(req.params.id)},
+        {$set: {status: req.body.status}}
+    );
+    res.send(result);
 })
 
 app.get('/', (req, res) => {
