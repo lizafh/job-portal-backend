@@ -9,14 +9,25 @@ require('dotenv').config()
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
-app.use(cors({
-    origin: ['http://localhost:5173',
-        'https://job-portal-9d38e.web.app',
-        'https://job-portal-9d38e.firebaseapp.com'
-    ],
+// app.use(cors({
+//     origin: ['http://localhost:5173',
+//         'https://job-portal-9d38e.web.app',
+//         'https://job-portal-9d38e.firebaseapp.com'
+//     ],
     
+//     credentials: true
+// }));
+
+
+app.use(cors({
+    origin: [
+        'http://localhost:5173',
+        'https://job-portal-da77d.web.app',        // ✅ new URL
+        'https://job-portal-da77d.firebaseapp.com'  // ✅ new URL
+    ],
     credentials: true
 }));
+
 app.use(express.json());
 app.use(cookieParser());
 
