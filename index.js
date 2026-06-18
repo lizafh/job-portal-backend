@@ -59,14 +59,22 @@ jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) =>{
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ynyb0.mongodb.net/?appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
+// const client = new MongoClient(uri, {
+//   serverApi: {
+//     version: ServerApiVersion.v1,
+//     strict: true,
+//     deprecationErrors: true,
+//   }
+// });
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
+  connectTimeoutMS: 10000,
+  socketTimeoutMS: 10000,
 });
-
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
